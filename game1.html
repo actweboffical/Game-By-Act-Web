@@ -1,0 +1,688 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Lunar Command: Tactical Combat (Ares AI Edition)</title>
+    <style>
+        body {
+            margin: 0;
+            background: #000;
+            overflow: hidden;
+            font-family: 'Courier New', Courier, monospace;
+            color: white;
+        }
+        
+        canvas {
+            display: block;
+        }
+        /* UI OVERLAYS */
+        
+        .ui-layer {
+            position: absolute;
+            top: 20px;
+            width: 100%;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            pointer-events: none;
+            gap: 15px;
+        }
+        
+        .top-controls {
+            pointer-events: auto;
+            background: rgba(0, 15, 30, 0.85);
+            padding: 12px 25px;
+            border-radius: 30px;
+            border: 1px solid #00d2ff;
+            display: flex;
+            align-items: center;
+            gap: 25px;
+            backdrop-filter: blur(10px);
+            box-shadow: 0 0 20px rgba(0, 210, 255, 0.3);
+        }
+        
+        .control-group {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .stats-container {
+            width: 100%;
+            display: flex;
+            justify-content: space-around;
+        }
+        
+        .stat-box {
+            background: rgba(0, 0, 0, 0.8);
+            padding: 15px;
+            border: 1px solid #444;
+            width: 280px;
+            border-radius: 8px;
+            text-align: center;
+            transition: all 0.3s;
+        }
+        
+        .p1 {
+            color: #00d2ff;
+            border-bottom: 4px solid #00d2ff;
+        }
+        
+        .p2 {
+            color: #ff4444;
+            border-bottom: 4px solid #ff4444;
+        }
+        /* TACTICAL RADAR */
+        
+        #radar-container {
+            position: absolute;
+            bottom: 25px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 400px;
+            height: 120px;
+            background: rgba(0, 5, 10, 0.9);
+            border: 1px solid rgba(0, 210, 255, 0.5);
+            border-radius: 4px;
+            overflow: hidden;
+            pointer-events: none;
+            box-shadow: 0 0 30px rgba(0, 0, 0, 1);
+        }
+        
+        #radar-canvas {
+            width: 100%;
+            height: 100%;
+        }
+        
+        #radar-label {
+            position: absolute;
+            top: 5px;
+            width: 100%;
+            text-align: center;
+            font-size: 9px;
+            color: #00d2ff;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            opacity: 0.7;
+        }
+        
+        #overlay,
+        #start-prompt {
+            position: absolute;
+            inset: 0;
+            background: radial-gradient(circle, #111 0%, #000 100%);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+        }
+        
+        #overlay {
+            display: none;
+            background: rgba(0, 0, 0, 0.85);
+            z-index: 2000;
+        }
+        
+        button {
+            background: transparent;
+            color: white;
+            border: 1px solid #00d2ff;
+            padding: 15px 40px;
+            cursor: pointer;
+            font-weight: bold;
+            font-size: 1.1em;
+            transition: 0.3s;
+            margin: 10px;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+        }
+        
+        button:hover {
+            background: #00d2ff;
+            color: #000;
+            box-shadow: 0 0 20px #00d2ff;
+        }
+        
+        .active-mode {
+            background: #00d2ff;
+            color: black;
+        }
+        
+        .hint {
+            color: #666;
+            font-size: 0.8em;
+            text-align: center;
+            margin-top: 20px;
+            line-height: 1.6;
+        }
+        
+        b {
+            color: #00d2ff;
+        }
+        
+        .main {
+            background: linear-gradient(to left, #0099ff, #0059ff);
+            color: white;
+            border: 1px solid #00d2ff;
+            padding: 15px 40px;
+            cursor: pointer;
+            font-weight: bold;
+            font-size: 1.1em;
+            transition: 0.3s;
+            margin: 10px;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+        }
+        
+        .main:hover {
+            background: linear-gradient(to left, #0099ff, #0059ff);
+            color: #000;
+            box-shadow: 0 0 20px #00d2ff;
+        }
+    </style>
+</head>
+
+<body>
+
+    <div id="start-prompt">
+        <h1 style="letter-spacing: 15px; margin-bottom: 0;">LUNAR COMMAND</h1>
+        <h1 class="main">Made By Act Web/h1>
+            <p style="color: #444; margin-bottom: 40px;">ARES AI - HYPER-AGRESSIVE SYSTEMS READY</p>
+
+            <div class="mode-select">
+                <button id="btn-1p" onclick="setMode(1)">Solo vs God-Ares AI</button>
+                <button id="btn-2p" class="active-mode" onclick="setMode(2)">PVP Encounter</button>
+            </div>
+
+            <button onclick="startGame()">INITIALIZE SYSTEMS</button>
+
+            <div class="hint">
+                <b>P1:</b> WASD | <b>S:</b> Missile |
+                <span id="p2-controls"><b>P2:</b> ARROWS | <b>DOWN:</b> Missile</span>
+                <br><br><i>LANDING: Touch green pads softly (Vel < 2) while upright!</i>
+            </div>
+    </div>
+
+    <div class="ui-layer">
+        <div class="top-controls">
+            <div class="control-group">
+                <label>WEAPON CALIBER</label>
+                <input type="range" id="missileSize" min="2" max="22" value="4">
+            </div>
+            <div class="control-group">
+                <label>AUDIO GAIN</label>
+                <input type="range" id="masterVolume" min="0" max="10000" step="1" value="10">
+            </div>
+            <div class="control-group">
+                <label>THRUST POWER</label>
+                <input type="range" id="TRUST" min="0.6" max="2" step="1" value="0.6" onchange="thrust()">
+            </div>
+        </div>
+        <div class="stats-container">
+            <div class="stat-box p1" id="p1-ui">
+                <b>PILOT 01 - BLUE</b><br> STATUS: <span id="p1-status">MANUAL</span><br> VEL: <span id="p1-speed">0</span> km/h
+            </div>
+            <div class="stat-box p2" id="p2-ui">
+                <b>PILOT 02 - <span id="p2-label">RED</span></b><br> STATUS: <span id="p2-status">ACTIVE</span><br> VEL: <span id="p2-speed">0</span> km/h
+            </div>
+        </div>
+    </div>
+
+    <div id="radar-container">
+        <div id="radar-label">Wide-Spectrum Tactical Radar</div>
+        <canvas id="radar-canvas"></canvas>
+    </div>
+
+    <div id="overlay">
+        <h1 id="msg">MISSION OVER</h1>
+        <button onclick="location.reload()">RE-SYNC SYSTEM</button>
+    </div>
+
+    <script>
+        const canvas = document.createElement('canvas');
+        const ctx = canvas.getContext('2d');
+        document.body.appendChild(canvas);
+
+        const radarCanvas = document.getElementById('radar-canvas');
+        const radarCtx = radarCanvas.getContext('2d');
+
+        let width, height, players, moon, gameActive = false;
+        let missiles = [];
+        let particles = [];
+        let gameMode = 2;
+        const keys = {};
+        const stars = Array.from({
+            length: 150
+        }, () => ({
+            x: Math.random(),
+            y: Math.random(),
+            s: Math.random() * 2
+        }));
+
+        // --- AUDIO SYSTEM ---
+        let audioCtx, masterGain;
+
+        function initAudio() {
+            audioCtx = new(window.AudioContext || window.webkitAudioContext)();
+            masterGain = audioCtx.createGain();
+            masterGain.connect(audioCtx.destination);
+            updateVolume();
+        }
+
+        function updateVolume() {
+            if (masterGain) masterGain.gain.value = document.getElementById('masterVolume').value / 100;
+        }
+        document.getElementById('masterVolume').oninput = updateVolume;
+
+        function playThrustSound() {
+            if (!audioCtx) return;
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            osc.type = 'sawtooth';
+            osc.frequency.setValueAtTime(60 + Math.random() * 20, audioCtx.currentTime);
+            gain.gain.setValueAtTime(0.01, audioCtx.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.1);
+            osc.connect(gain);
+            gain.connect(masterGain);
+            osc.start();
+            osc.stop(audioCtx.currentTime + 0.1);
+        }
+
+        function playShootSound() {
+            if (!audioCtx) return;
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            osc.type = 'square';
+            osc.frequency.setValueAtTime(600, audioCtx.currentTime);
+            osc.frequency.exponentialRampToValueAtTime(100, audioCtx.currentTime + 0.1);
+            gain.gain.setValueAtTime(0.05, audioCtx.currentTime);
+            gain.gain.linearRampToValueAtTime(0, audioCtx.currentTime + 0.1);
+            osc.connect(gain);
+            gain.connect(masterGain);
+            osc.start();
+            osc.stop(audioCtx.currentTime + 0.1);
+        }
+
+        function playCrashSound() {
+            if (!audioCtx) return;
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            osc.type = 'sine';
+            osc.frequency.setValueAtTime(100, audioCtx.currentTime);
+            osc.frequency.exponentialRampToValueAtTime(10, audioCtx.currentTime + 0.5);
+            gain.gain.setValueAtTime(0.3, audioCtx.currentTime);
+            gain.gain.linearRampToValueAtTime(0, audioCtx.currentTime + 0.5);
+            osc.connect(gain);
+            gain.connect(masterGain);
+            osc.start();
+            osc.stop(audioCtx.currentTime + 0.5);
+        }
+
+        // --- GAME LOGIC ---
+        function setMode(m) {
+            gameMode = m;
+            document.getElementById('btn-1p').className = m === 1 ? 'active-mode' : '';
+            document.getElementById('btn-2p').className = m === 2 ? 'active-mode' : '';
+            document.getElementById('p2-label').innerText = m === 1 ? 'GOD-ARES AI' : 'BLUE';
+        }
+
+        function startGame() {
+            document.getElementById('start-prompt').style.display = 'none';
+            initAudio();
+            init();
+            gameActive = true;
+            loop();
+        }
+
+        function init() {
+            width = canvas.width = window.innerWidth;
+            height = canvas.height = window.innerHeight;
+            radarCanvas.width = 1400;
+            radarCanvas.height = 120;
+
+            players = [{
+                id: 1,
+                x: width * 0.2,
+                y: height - 300,
+                vx: 0,
+                vy: 0,
+                angle: 0,
+                color: '#00d2ff',
+                state: 'flying',
+                lastShot: 0,
+                thrustPower: 0.65,
+                isAI: false,
+                keys: {
+                    up: 'KeyW',
+                    left: 'KeyA',
+                    right: 'KeyD',
+                    shoot: 'KeyS',
+                    toggle: 'KeyQ',
+                    thrust: 'KeyZ'
+                }
+            }, {
+                id: 2,
+                x: width * 0.8,
+                y: height - 300,
+                vx: 0,
+                vy: 0,
+                angle: 0,
+                color: '#ff4444',
+                state: 'flying',
+                lastShot: 0,
+                thrustPower: 0.2, // Slight buff to AI thrust
+                isAI: (gameMode === 1),
+                keys: {
+                    up: 'ArrowUp',
+                    left: 'ArrowLeft',
+                    right: 'ArrowRight',
+                    shoot: 'ArrowDown'
+                }
+            }];
+
+            const points = 60;
+            moon = {
+                surface: Array.from({
+                    length: points + 1
+                }, (_, i) => ({
+                    x: (width / points) * i,
+                    y: height - 60 - Math.random() * 10
+                })),
+                pads: [{
+                    x: width * 0.15,
+                    w: 100
+                }, {
+                    x: width * 0.5,
+                    w: 120
+                }, {
+                    x: width * 0.85,
+                    w: 100
+                }]
+            };
+            moon.pads.forEach(pad => {
+                moon.surface.forEach(p => {
+                    if (Math.abs(p.x - pad.x) < pad.w * 0.8) p.y = height - 40;
+                });
+            });
+        }
+
+        window.onkeydown = e => {
+            keys[e.code] = true;
+            players.forEach(p => {
+                if (p.state !== 'flying') return;
+                if (p.id === 1 && e.code === p.keys.toggle) {
+                    p.isAI = !p.isAI;
+                    const box = document.getElementById('p1-ui');
+                    box.classList.toggle('auto-active', p.isAI);
+                    document.getElementById('p1-status').innerText = p.isAI ? "MANUAL" : "MANUAL";
+                }
+                if (!p.isAI && e.code === p.keys.shoot) fireMissile(p);
+            });
+        };
+        window.onkeyup = e => keys[e.code] = false;
+
+        function fireMissile(p) {
+            // Reduced cooldown for AI for higher difficulty
+            const cooldown = p.isAI ? 200 : 350;
+            if (Date.now() - p.lastShot < cooldown) return;
+
+            playShootSound();
+            missiles.push({
+                x: p.x + Math.sin(p.angle) * 20,
+                y: p.y - Math.cos(p.angle) * 20,
+                vx: p.vx + Math.sin(p.angle) * 9, // Faster missiles
+                vy: p.vy - Math.cos(p.angle) * 16,
+                owner: p.id,
+                life: 180
+            });
+            p.lastShot = Date.now();
+        }
+
+        function runCombatAI(ai, target) {
+            if (ai.state !== 'flying') return;
+
+            // 1. Hyper-Fast Target Prediction
+            const dx = target.x - ai.x;
+            const dy = target.y - ai.y;
+            const dist = Math.hypot(dx, dy);
+
+            // AI lead calculation
+            const missileVel = 16;
+            const timeToReach = dist / missileVel;
+
+            const tx = target.x + (target.vx * timeToReach);
+            const ty = target.y + (target.vy * timeToReach);
+
+            const angleToTarget = Math.atan2(tx - ai.x, -(ty - ai.y));
+
+            // 2. High-Speed Snapping Rotation
+            let diff = angleToTarget - ai.angle;
+            while (diff < -Math.PI) diff += Math.PI * 2;
+            while (diff > Math.PI) diff -= Math.PI * 2;
+            ai.angle += diff * 0.25; // Doubled rotation responsiveness
+
+            // 3. Aggressive Maneuvering
+            const tooLow = ai.y > height - 300;
+            const outOfRange = dist > 400;
+
+            // AI stays above ground and maintains pressure
+            if (tooLow || outOfRange || Math.random() < 0.1) {
+                ai.vx += Math.sin(ai.angle) * ai.thrustPower;
+                ai.vy -= Math.cos(ai.angle) * ai.thrustPower;
+                if (Math.random() < 0.3) playThrustSound();
+            }
+
+            // 4. Tactical Fire with tight tolerance
+            if (Math.abs(diff) < 0.15 && dist < 1200 && target.state === 'flying') {
+                fireMissile(ai);
+            }
+        }
+
+        function thrust() {
+            var th = document.getElementById("TRUST").value;
+        }
+
+        function loop() {
+            if (!gameActive) return;
+            ctx.fillStyle = '#010103';
+            ctx.fillRect(0, 0, width, height);
+            ctx.fillStyle = "#fff";
+            stars.forEach(s => ctx.fillRect(s.x * width, s.y * height, s.s, s.s));
+
+            drawMoon();
+
+            particles.forEach((p, i) => {
+                p.x += p.vx;
+                p.y += p.vy;
+                p.life -= 0.02;
+                if (p.life <= 0) particles.splice(i, 1);
+                ctx.fillStyle = p.color;
+                ctx.globalAlpha = p.life;
+                ctx.fillRect(p.x, p.y, 2, 2);
+            });
+            ctx.globalAlpha = 1;
+
+            const mSize = parseInt(document.getElementById('missileSize').value);
+            missiles.forEach((m, i) => {
+                m.x += m.vx;
+                m.y += m.vy;
+                m.life--;
+                if (m.x < 0) m.x = width;
+                if (m.x > width) m.x = 0;
+
+                ctx.fillStyle = m.owner === 1 ? '#00d2ff' : '#ff4444';
+                ctx.shadowBlur = 10;
+                ctx.shadowColor = ctx.fillStyle;
+                ctx.fillRect(m.x - mSize / 2, m.y - mSize / 2, mSize, mSize);
+                ctx.shadowBlur = 0;
+
+                players.forEach(p => {
+                    if (p.id !== m.owner && p.state === 'flying' && Math.hypot(p.x - m.x, p.y - m.y) < 22) {
+                        p.state = 'crashed';
+                        createExplosion(p.x, p.y, p.color);
+                        playCrashSound();
+                        missiles.splice(i, 1);
+                    }
+                });
+                if (m.life <= 0 || m.y > height) missiles.splice(i, 1);
+            });
+
+            players.forEach((p, idx) => {
+                const other = players[(idx + 1) % 2];
+                if (p.state === 'flying') {
+                    if (p.isAI) {
+                        runCombatAI(p, other);
+                    } else {
+                        if (keys[p.keys.left]) p.angle -= 0.08;
+                        if (keys[p.keys.right]) p.angle += 0.08;
+                        if (keys[p.keys.up]) {
+                            p.vx += Math.sin(p.angle) * p.thrustPower;
+                            p.vy -= Math.cos(p.angle) * p.thrustPower;
+                            playThrustSound();
+                            drawFlame(p);
+                        }
+                    }
+
+                    p.vy += 0.05;
+                    p.x += p.vx;
+                    p.y += p.vy;
+                    if (p.x < 0) p.x = width;
+                    if (p.x > width) p.x = 0;
+
+                    document.getElementById(`p${p.id}-speed`).innerText = Math.floor(Math.hypot(p.vx, p.vy) * 20);
+                    checkCollision(p);
+                    if (p.isAI && p.state === 'flying') drawFlame(p);
+                }
+                drawShip(p);
+            });
+
+            drawRadar();
+            if (players.every(p => p.state !== 'flying')) checkGameOver();
+            requestAnimationFrame(loop);
+        }
+
+        function drawMoon() {
+            ctx.fillStyle = '#0a0a0f';
+            ctx.beginPath();
+            moon.surface.forEach((p, i) => i === 0 ? ctx.moveTo(p.x, p.y) : ctx.lineTo(p.x, p.y));
+            ctx.lineTo(width, height);
+            ctx.lineTo(0, height);
+            ctx.fill();
+            moon.pads.forEach(p => {
+                ctx.fillStyle = '#00ffcc';
+                ctx.fillRect(p.x - p.w / 2, height - 42, p.w, 8);
+            });
+        }
+
+        function drawShip(p) {
+            ctx.save();
+            ctx.translate(p.x, p.y);
+            ctx.rotate(p.angle);
+            ctx.strokeStyle = p.state === 'crashed' ? '#333' : p.color;
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.moveTo(0, -18);
+            ctx.lineTo(10, 12);
+            ctx.lineTo(0, 6);
+            ctx.lineTo(-10, 12);
+            ctx.closePath();
+            ctx.stroke();
+            if (p.isAI && p.state === 'flying') {
+                ctx.font = "bold 9px Arial";
+                ctx.fillStyle = p.color;
+                ctx.fillText("", -12, -22);
+            }
+            ctx.restore();
+        }
+
+        function drawFlame(p) {
+            ctx.save();
+            ctx.translate(p.x, p.y);
+            ctx.rotate(p.angle);
+            ctx.fillStyle = Math.random() > 0.5 ? "#ffaa00" : "#ff4400";
+            ctx.beginPath();
+            ctx.moveTo(-4, 10);
+            ctx.lineTo(0, 15 + Math.random() * 15);
+            ctx.lineTo(4, 10);
+            ctx.fill();
+            ctx.restore();
+        }
+
+        function createExplosion(x, y, color) {
+            for (let i = 0; i < 50; i++) {
+                particles.push({
+                    x,
+                    y,
+                    vx: (Math.random() - 0.5) * 15,
+                    vy: (Math.random() - 0.5) * 15,
+                    life: 1.0,
+                    color
+                });
+            }
+        }
+
+        function checkCollision(p) {
+            const section = Math.floor(p.x / (width / 60));
+            const groundY = moon.surface[Math.min(60, section)].y;
+
+            if (p.y + 12 >= groundY) {
+                const pad = moon.pads.find(pad => Math.abs(p.x - pad.x) < pad.w / 2);
+                const upright = Math.abs(p.angle) < 0.3;
+                const slow = Math.abs(p.vy) < 2.0;
+
+                if (pad && upright && slow) {
+                    p.state = 'landed';
+                    p.y = groundY - 12;
+                } else {
+                    p.state = 'crashed';
+                    createExplosion(p.x, p.y, p.color);
+                    playCrashSound();
+                }
+                p.vx = 0;
+                p.vy = 0;
+            }
+        }
+
+        function drawRadar() {
+            radarCtx.fillStyle = 'rgba(0, 5, 10, 0.9)';
+            radarCtx.fillRect(0, 0, radarCanvas.width, radarCanvas.height);
+            const sX = radarCanvas.width / width;
+            const sY = radarCanvas.height / height;
+            players.forEach(p => {
+                if (p.state !== 'crashed') {
+                    radarCtx.fillStyle = p.color;
+                    radarCtx.beginPath();
+                    radarCtx.arc(p.x * sX, p.y * sY, 3, 0, Math.PI * 2);
+                    radarCtx.fill();
+                }
+            });
+            missiles.forEach(m => {
+                radarCtx.fillStyle = '#fff';
+                radarCtx.fillRect(m.x * sX, m.y * sY, 2, 2);
+            });
+        }
+
+        function checkGameOver() {
+            gameActive = false;
+            setTimeout(() => {
+                document.getElementById('overlay').style.display = 'flex';
+                const p1 = players[0].state;
+                const p2 = players[1].state;
+                let result = "NEUTRALIZED";
+                if (p1 === 'landed') result = "BLUE SECURED SECTOR";
+                else if (p2 === 'landed') result = "RED SECURED SECTOR";
+                document.getElementById('msg').innerText = result;
+            }, 1000);
+        }
+
+        window.addEventListener('resize', () => {
+            width = canvas.width = window.innerWidth;
+            height = canvas.height = window.innerHeight;
+        });
+    </script>
+</body>
+
+</html>
